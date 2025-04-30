@@ -28,7 +28,7 @@ const sketch = (p) => {
         constructor() {
             this.fill = p.color(252, 3, 65);
             this.stroke = p.color(255, 110, 150);
-            this.radius = p.width * 0.4;
+            this.radius = 400;
             this.location = p.createVector(0, -450, -1000);
             this.gSize = this.radius * 2.4;
             this.sphereGraphic = this.createSphereGraphic(this.createGraphic(p.WEBGL));
