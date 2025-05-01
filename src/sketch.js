@@ -1,16 +1,38 @@
+import * as Tone from "tone";
+import Music from "./Music";
+import Voices from "./Voices";
+
 /**
  * @param {import('p5')} p
  */
 const sketch = (p) => {
     let scl = 30,
         terrain,
-        sun;
+        sun,
+        masterBus,
+        music,
+        voices;
     p.setup = () => {
         p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
+        masterBus = new Tone.Gain().toDestination();
+        music = new Music(masterBus, p);
         terrain = new Terrain(p.windowWidth, p.windowHeight);
         sun = new Sun();
+        voices = new Voices(masterBus);
         p.pixelDensity(1);
         p.frameRate(20);
+        p.mousePressed = async () => {
+            if (music?.mousePressed) {
+                await music.mousePressed();
+            } else {
+                console.warn("music.mousePressed is not defined");
+            }
+        };
+        p.keyPressed = () => {
+            if (p.key === " ") {
+                voices?.play("voice1");
+            }
+        };
     };
     p.windowResized = () => {
         p.resizeCanvas(p.windowWidth, p.windowHeight);
@@ -24,6 +46,9 @@ const sketch = (p) => {
         sun.update();
         sun.draw();
     };
+    // ============
+    // SUN
+    // ============
     class Sun {
         constructor() {
             this.fill = p.color(252, 3, 65);
@@ -38,16 +63,19 @@ const sketch = (p) => {
             this.direction = 1;
             this.scale = 1;
         }
+        /**
+         * @param {import('p5')} g
+         */
         createSphereGraphic(g) {
             g.clear();
             g.stroke(230);
             g.fill(255);
-            g.sphere(this.radius, 20);
+            g.sphere(this.radius, 24, 24);
             return g;
         }
         createBarGraphic(g) {
             g.clear();
-            let boxSize = 3;
+            let boxSize = 5;
             let scrollOffset = (p.frameCount * 0.5) % (boxSize * 4); // scroll speed
             for (let i = -this.radius + 10; i < this.radius + 50; i += boxSize * 4) {
                 g.push();
@@ -98,6 +126,9 @@ const sketch = (p) => {
             p.pop();
         }
     }
+    // =============
+    // TERRAIN
+    // =============
     class Terrain {
         constructor() {
             this.flying = 0;
@@ -109,33 +140,46 @@ const sketch = (p) => {
             this.stroke = p.color(150, 0, 255);
             this.fill = p.color(0, 150, 255);
             this.viewAngle = 85;
-            this.setAltitudes(-200, 500);
-            for (var x = 0; x < this.cols; x++) {
-                this.terrain[x] = [];
-                for (var y = 0; y < this.rows; y++) {
-                    this.terrain[x][y] = 0; //specify a default value for now
+            this.shiftingAltitudes = true;
+            this.fadeIn = 0;
+            this.setAltitudes(0, 0);
+            for (let y = 0; y < this.rows; y++) {
+                let row = [];
+                for (let x = 0; x < this.cols; x++) {
+                    row.push(0); // or initial value with noise if you want
                 }
+                this.terrain.push(row);
             }
+            console.log(this.terrain);
         }
         update() {
             this.flying -= 0.05;
-            var yoff = this.flying;
-            for (var y = 0; y < this.rows; y++) {
-                var xoff = 0;
-                for (var x = 0; x < this.cols; x++) {
-                    let center = this.cols / 2;
-                    let distanceFromMiddle = p.abs(x - center);
-                    let maxDistance = center;
-                    let heightMultiplier = distanceFromMiddle / maxDistance;
-                    if (heightMultiplier > 20) {
-                        heightMultiplier = 1;
-                    }
-                    this.terrain[x][y] =
-                        p.map(p.noise(xoff, yoff), 0, 1, this.lowAltitude, this.highAltitude) * heightMultiplier;
-                    xoff += 0.05;
-                }
-                yoff += 0.05;
+            if (this.fadeIn < 1) {
+                this.fadeIn += 0.0001;
             }
+            if (p.frameCount % 10 === 0) {
+                let tick = (p.frameCount / 10) * 0.001;
+                let min = p.lerp(p.map(p.noise(tick, 0), 0, 1, -500, 100), 0, this.fadeIn);
+                let max = p.lerp(0, p.map(p.noise(tick, 1000), 0, 1, 100, 2000), this.fadeIn);
+                this.setAltitudes(min, max);
+            }
+            this.terrain.pop();
+            const newRow = [];
+            let yoff = this.flying + this.rows * 0.05;
+            var xoff = 0;
+            for (var x = 0; x < this.cols; x++) {
+                let center = this.cols / 2;
+                let distanceFromMiddle = p.abs(x - center);
+                let maxDistance = center;
+                let heightMultiplier = distanceFromMiddle / maxDistance;
+                if (heightMultiplier > 20) {
+                    heightMultiplier = 1;
+                }
+                const h = p.map(p.noise(xoff, yoff), 0, 1, this.lowAltitude, this.highAltitude) * heightMultiplier;
+                newRow.push(h);
+                xoff += 0.05;
+            }
+            this.terrain.unshift(newRow);
         }
         setAltitudes(low, high) {
             this.lowAltitude = low;
@@ -151,11 +195,11 @@ const sketch = (p) => {
 
             p.translate(-(this.width / 2 + scl / 2), -this.height / 2);
             p.translate(0, 50, zOffset);
-            for (let y = 0; y < this.rows; y++) {
+            for (let y = 0; y < this.rows - 1; y++) {
                 p.beginShape(p.TRIANGLE_STRIP);
                 for (let x = 0; x < this.cols; x++) {
-                    p.vertex(x * scl, y * scl, this.terrain[x][y]);
-                    p.vertex(x * scl, (y + 1) * scl, this.terrain[x][y + 1]);
+                    p.vertex(x * scl, y * scl, this.terrain[y][x]);
+                    p.vertex(x * scl, (y + 1) * scl, this.terrain[y + 1][x]);
                 }
                 p.endShape();
             }
