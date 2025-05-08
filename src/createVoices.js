@@ -31,7 +31,7 @@ class VoiceFile {
 }
 export const voiceFiles = {
     SPIRITS_GET_EATEN: new VoiceFile("SPIRITS GET EATEN", "Spirits_Get_Eaten.mp3", {
-        startTimes: [{ start: 12 }, { start: 3 }, { start: 10 }, { start: 14 }, { start: 0, duration: 5 }],
+        startTimes: [{ start: 12 }, { start: 13.75 }],
     }),
     JFK_DECLARATION: new VoiceFile("JFK DECLARATION", "JFK_declaration.mp3", {
         cuts: [
@@ -60,122 +60,102 @@ export const voiceFiles = {
         ],
     }),
 };
-function createVoices(output) {
+export default function createVoices() {
+    const filter = new Tone.Filter(1000, "lowpass"); // or .connect(globalOutput)
+    const reverb = new Tone.Reverb(2);
+    const output = new Tone.Gain().connect(filter).connect(reverb).toDestination();
     const players = new Map();
-    // const files = voiceFiles;
-
-    // preload audio files
-    Object.keys(voiceFiles).forEach((v) => {
-        v = voiceFiles[v];
-        load(v.name, getPath(v.filename));
-    });
-    function load(name, url) {
+    const voiceList = Object.values(voiceFiles);
+    let lastPlayed = null;
+    let hasInteracted = false;
+    let isPlaying = false;
+    let isStopped = false;
+    let currentPlayer = null;
+    // Preload
+    voiceList.forEach((vf) => {
         const player = new Tone.Player({
-            url,
+            url: getPath(vf.filename),
             autostart: false,
-            onload: () => console.log(`${name} loaded.`),
+            onload: () => console.log(`${vf.name} loaded.`),
+            onstop: () => {
+                isPlaying = false;
+            },
         }).connect(output);
+        players.set(vf.name, player);
+    });
 
-        players.set(name, player);
+    function pickNewVoice() {
+        const options = voiceList.filter((v) => v !== lastPlayed);
+        return options[Math.floor(Math.random() * options.length)];
     }
-    function play(vFile) {
-        stopAll();
-        let name = vFile.name;
-        const player = players.get(name);
+
+    async function play(vf) {
+        if (!hasInteracted || isPlaying || isStopped) return;
+
+        await Tone.start();
+
+        const player = players.get(vf.name);
         if (!player) {
-            console.warn(`Voice "${name}" not found.`);
+            console.warn(`No player found for voice: ${vf.name}`);
             return;
         }
-        let clip = vFile.getRandomStart();
-        console.log(clip);
-        // Start audio context if needed
-        if (clip.hasDuration) {
-            Tone.start().then(() => {
-                player.start(Tone.now(), clip.start, clip.duration);
-            });
-        } else {
-            Tone.start().then(() => {
-                player.start(Tone.now(), clip.start);
-            });
-        }
-    }
-    function stopAll() {
-        players.forEach((player) => {
-            if (player.state === "started") {
-                player.stop();
+
+        const clip = vf.getRandomStart();
+
+        // ✅ Do NOT call stop() unless already started
+        if (player.state === "started") {
+            try {
+                player.stop(); // only safe if it's currently playing
+            } catch (err) {
+                console.warn("Error stopping player:", err);
             }
-        });
-    }
-    function stop(name) {
-        const player = this.players.get(name);
-        if (player?.state === "started") {
-            player.stop();
         }
+
+        // ✅ Wait until player is loaded
+        if (!player.loaded) {
+            console.warn("Player not loaded yet:", vf.name);
+            return;
+        }
+
+        try {
+            if (clip.hasDuration) {
+                player.start(Tone.now(), clip.start, clip.duration);
+            } else {
+                player.start(Tone.now(), clip.start);
+            }
+        } catch (err) {
+            console.error("Error starting player:", err);
+            return;
+        }
+
+        isPlaying = true;
+        lastPlayed = vf;
+        currentPlayer = player;
+    }
+
+    function draw() {
+        if (!hasInteracted || isPlaying || isStopped) return;
+
+        const next = pickNewVoice();
+        play(next);
+    }
+
+    function start() {
+        hasInteracted = true;
+        isStopped = false;
+        Tone.start().then(() => console.log("Audio context resumed."));
+    }
+    function stop() {
+        isStopped = true;
+        if (currentPlayer && currentPlayer.state === "started") {
+            currentPlayer.stop();
+        }
+        isPlaying = false;
     }
     return {
-        load,
-        play,
+        draw,
+        start, // Exposed so user must trigger this (e.g., from mousePressed)
+        isStopped,
         stop,
-        stopAll,
     };
 }
-// export default class Voices {
-//     constructor(output) {
-//         this.output = output;
-//         this.players = new Map();
-//         this.files = voiceFiles;
-//         // preload audio files
-//         Object.keys(voiceFiles).forEach((v) => {
-//             v = voiceFiles[v];
-//             this.load(v.name, getPath(v.filename));
-//         });
-//         // this.load("voice2", "/audio/voice2.mp3");
-//     }
-
-//     load(name, url) {
-//         const player = new Tone.Player({
-//             url,
-//             autostart: false,
-//             onload: () => console.log(`${name} loaded.`),
-//         }).connect(this.output);
-
-//         this.players.set(name, player);
-//     }
-
-//     play(vFile) {
-//         this.stopAll();
-//         let name = vFile.name;
-//         const player = this.players.get(name);
-//         if (!player) {
-//             console.warn(`Voice "${name}" not found.`);
-//             return;
-//         }
-//         let clip = vFile.getRandomStart();
-//         console.log(clip);
-//         // Start audio context if needed
-//         if (clip.hasDuration) {
-//             Tone.start().then(() => {
-//                 player.start(Tone.now(), clip.start, clip.duration);
-//             });
-//         } else {
-//             Tone.start().then(() => {
-//                 player.start(Tone.now(), clip.start);
-//             });
-//         }
-//     }
-//     stopAll() {
-//         this.players.forEach((player) => {
-//             if (player.state === "started") {
-//                 player.stop();
-//             }
-//         });
-//     }
-//     stop(name) {
-//         const player = this.players.get(name);
-//         if (player?.state === "started") {
-//             player.stop();
-//         }
-//     }
-// }
-
-export default createVoices;
