@@ -13,7 +13,8 @@ const sketch = (p) => {
         sun,
         masterBus,
         music,
-        voices;
+        voices,
+        isRunning = false;
     p.setup = () => {
         p.createCanvas(p.windowWidth, p.windowHeight, p.WEBGL);
         masterBus = new Tone.Gain().toDestination();
@@ -24,17 +25,24 @@ const sketch = (p) => {
         p.pixelDensity(1);
         p.frameRate(20);
         p.mousePressed = async () => {
+            if (!isRunning) {
+                voices.start();
+                isRunning = true;
+            } else {
+                voices.stop();
+                isRunning = false;
+            }
             if (music?.mousePressed) {
                 await music.mousePressed();
             } else {
                 console.warn("music.mousePressed is not defined");
             }
         };
-        p.keyPressed = () => {
-            if (p.key === " ") {
-                voices?.play(voiceFiles.JFK_DECLARATION);
-            }
-        };
+        // p.keyPressed = () => {
+        //     if (p.key === " ") {
+        //         voices?.play(voiceFiles.JFK_DECLARATION);
+        //     }
+        // };
     };
     p.windowResized = () => {
         p.resizeCanvas(p.windowWidth, p.windowHeight);
@@ -47,6 +55,7 @@ const sketch = (p) => {
         terrain.draw();
         sun.update();
         sun.draw();
+        voices.draw();
     };
 };
 
