@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 import Music from "./Music";
-import createVoices, { voiceFiles } from "./createVoices";
+import createVoices from "./createVoices";
 import createTerrain from "./createTerrain";
 import createSun from "./createSun";
 
